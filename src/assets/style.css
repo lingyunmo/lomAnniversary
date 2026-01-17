@@ -1,55 +1,63 @@
 /* 引入本地字体 */
 @font-face {
-  font-family: 'NativeFont';
-  src: url('./native.ttf') format('truetype');
-  font-weight: normal;
-  font-style: normal;
+    font-family: 'NativeFont';
+    src: url('./native.ttf') format('truetype');
+    font-weight: normal;
+    font-style: normal;
 }
 
 /* 全局样式重置 */
 * {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
 }
 
 /* 统一背景色与字体 */
 body {
-  min-height: 100vh;
-  background-color: #202123; /* ChatGPT 深色背景 */
-  color: #d1d5db; /* 浅灰色文本 */
-  font-family: 'NativeFont', 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    min-height: 100vh;
+    /* 🎨 修改点 1: 改为新版深色背景，与 Login/Home 统一 */
+    background-color: #0f1115;
+    color: #ffffff; /* 改为纯白，对比度更高 */
+    font-family: 'NativeFont', 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    -webkit-font-smoothing: antialiased; /* 让字体更清晰 */
 }
 
 /* App 根布局 */
 #app {
-  display: flex;
-  flex-direction: column;
-  min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
 }
 
-/* 内容区域 */
-.content-wrapper {
-  flex: 1;
-  padding: 20px;
-  background-color: #343541; /* ChatGPT 风格背景 */
-  border-radius: 8px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-}
+/* ❌ 核心修改：我把下面这段 .content-wrapper 彻底删掉了！
+   不再有背景色，不再有强制边距。
+*/
 
 /* 统一链接样式 */
 a {
-  color: #10a37f; /* ChatGPT 绿色 */
-  text-decoration: none;
+    color: #3b82f6; /* 修改点 2: 改为科技蓝，配合新主题 */
+    text-decoration: none;
+    transition: color 0.3s;
 }
 
 a:hover {
-  text-decoration: underline;
+    color: #60a5fa; /* 悬停变亮 */
+    text-decoration: none; /* 现代设计通常去掉下划线，只变色 */
 }
 
-/* 响应式优化 */
-@media (max-width: 768px) {
-  .content-wrapper {
-    padding: 15px;
-  }
+/* 滚动条美化 (可选，建议加上) */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+::-webkit-scrollbar-track {
+    background: #0f1115;
+}
+::-webkit-scrollbar-thumb {
+    background: #333;
+    border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: #555;
 }

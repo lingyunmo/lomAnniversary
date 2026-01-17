@@ -1,27 +1,140 @@
-<script setup>
-import { ref, computed, onMounted } from 'vue'
-import axios from "axios"
+<template>
+  <section class="reward-map-card">
+    <div class="card-header">
+      <div class="title-wrapper">
+        <Target :size="28" class="header-icon" />
+        <h2>联盟奖励里程碑</h2>
+      </div>
+      <div class="subtitle">集结联盟之力，解锁丰厚大奖</div>
+    </div>
 
-// 奖品里程碑配置
+    <div v-if="loading" class="state-box">
+      <Loader2 :size="32" class="spin" />
+      <span>正在同步联盟数据...</span>
+    </div>
+
+    <div v-else-if="error" class="state-box error">
+      <AlertTriangle :size="32" />
+      <span>{{ error }}</span>
+    </div>
+
+    <div v-else class="map-content">
+      <div class="progress-section">
+        <div class="progress-track">
+          <div
+              class="progress-fill"
+              :style="{ width: progressPercentage + '%' }"
+          >
+            <div class="progress-glow"></div>
+          </div>
+
+          <div
+              v-for="(milestone, index) in milestones"
+              :key="index"
+              class="milestone-node"
+              :class="{ 'unlocked': participantCount >= milestone.target }"
+              :style="{ left: milestone.position }"
+          >
+            <div class="node-icon-wrapper">
+              <template v-if="participantCount >= milestone.target">
+                <Unlock :size="20" class="icon-unlocked" />
+              </template>
+              <template v-else>
+                <Lock :size="16" class="icon-locked" />
+              </template>
+            </div>
+            <div class="node-label">{{ milestone.target }}人</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="status-banner">
+        <div class="status-item">
+          <Users :size="20" class="status-icon" />
+          <span>当前参与人数：</span>
+          <span class="highlight-num">{{ participantCount }}</span>
+        </div>
+        <div class="status-divider"></div>
+        <div class="status-item">
+          <TrendingUp :size="20" class="status-icon" />
+          <span>解锁进度：</span>
+          <span class="highlight-num">{{ progressPercentage.toFixed(1) }}%</span>
+        </div>
+      </div>
+
+      <div class="rewards-grid">
+        <div
+            v-for="(milestone, index) in milestones"
+            :key="index"
+            class="reward-card"
+            :class="{ 'is-unlocked': participantCount >= milestone.target }"
+        >
+          <div class="card-top">
+            <span class="target-badge">{{ milestone.target }}人达成</span>
+            <span class="status-text">
+              <component :is="participantCount >= milestone.target ? CheckCircle2 : Lock" :size="14" />
+              {{ participantCount >= milestone.target ? '已解锁' : '未解锁' }}
+            </span>
+          </div>
+
+          <ul class="reward-list">
+            <li v-for="(reward, rIndex) in milestone.rewards" :key="rIndex">
+              <Gift :size="14" class="list-icon" />
+              {{ reward }}
+            </li>
+          </ul>
+
+          <div class="locked-overlay" v-if="participantCount < milestone.target">
+            <Lock :size="32" class="overlay-lock" />
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+</template>
+
+<script setup>
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+import axios from 'axios' // 记得如果报错改成 api
+import { Target, Users, TrendingUp, Lock, Unlock, Gift, CheckCircle2, Loader2, AlertTriangle } from 'lucide-vue-next'
+
+// 配置
+const MAX_TARGET = 20 // 最大目标人数，用于计算百分比
 const milestones = ref([
   {
     target: 5,
-    rewards: ['冠军：256.3598￥', '亚军：163.9124￥', '季军：71.6727￥'],
+    rewards: [
+      '冠军：下界合金锄 x1 (顶级嘲讽)',
+      '亚军：一组圆石 (真正的硬通货)',
+      '季军：附魔金苹果 (保命神药)'
+    ],
     position: '25%'
   },
   {
     target: 10,
-    rewards: ['冠军：S奖牌', '前3名：R奖牌', '前5名：Q奖牌'],
+    rewards: [
+      '冠军：5.20￥ (爱意糖点)',
+      '前3名：2.33￥ (满屏 233)',
+      '前5名：1.11￥ (光棍奖励)'
+    ],
     position: '50%'
   },
   {
     target: 15,
-    rewards: ['冠军：黄金徽章', '前5名：白银徽章', '前10名：青铜徽章'],
+    rewards: [
+      '冠军：8.88￥ (恭喜发财)',
+      '前5名：3.60￥ (全方位守护)',
+      '前10名：1.68￥ (一路发发)'
+    ],
     position: '75%'
   },
   {
     target: 20,
-    rewards: ['冠军：钻石奖杯', '前3名：金奖杯', '前10名：银奖杯'],
+    rewards: [
+      '冠军：11.11￥ (11周年庆限定)',
+      '前3名：6.66￥ (全场扣 666)',
+      '前10名：5.20￥ (爱满全服)'
+    ],
     position: '100%'
   }
 ])
@@ -31,354 +144,292 @@ const loading = ref(true)
 const error = ref(null)
 const ws = ref(null)
 
-// 计算当前激活的里程碑
-const activeMilestone = computed(() =>
-    milestones.value.filter(m => participantCount.value >= m.target)
-)
+// 计算进度百分比 (最高100%)
+const progressPercentage = computed(() => {
+  const pct = (participantCount.value / MAX_TARGET) * 100
+  return Math.min(Math.max(pct, 0), 100)
+})
 
-// 处理WebSocket数据
-const handleWebSocketData = async (event) => {
+// 处理 WebSocket
+const handleWebSocketData = (event) => {
   try {
-    const leaderboard = JSON.parse(event.data)
-    const validUsers = leaderboard.filter(user => user.score > 0)
+    const data = JSON.parse(event.data)
+    // 假设 WS 推送的是整个排行榜数组
+    const validUsers = Array.isArray(data) ? data.filter(u => u.score > 0) : []
     participantCount.value = validUsers.length
-  } catch (err) {
-    error.value = '实时数据解析失败'
+  } catch (e) {
+    console.error('WS Data Error', e)
   }
 }
 
-// 获取初始数据
-const fetchInitialData = async () => {
+const fetchData = async () => {
   try {
+    // 记得改成 api.get 如果你有封装
     const res = await axios.get('/api/leaderboard')
     const validUsers = res.data.filter(user => user.score > 0)
     participantCount.value = validUsers.length
   } catch (err) {
-    error.value = err.response?.data?.error || '数据加载失败'
+    error.value = '无法获取进度数据'
   } finally {
     loading.value = false
   }
 }
 
 onMounted(() => {
-  ws.value = new WebSocket('/ws');
-  ws.value.onmessage = handleWebSocketData
-  fetchInitialData()
+  // WS 连接逻辑
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  const wsUrl = `${protocol}//${window.location.host}/ws`
+
+  try {
+    ws.value = new WebSocket(wsUrl)
+    ws.value.onmessage = handleWebSocketData
+  } catch (e) { console.error(e) }
+
+  fetchData()
+})
+
+onUnmounted(() => {
+  if (ws.value) ws.value.close()
 })
 </script>
 
-<template>
-  <section class="ranking">
-    <h2>奖品解锁进度</h2>
-
-    <!-- 加载状态 -->
-    <div v-if="loading" class="loading-message">数据加载中...</div>
-
-    <!-- 错误状态 -->
-    <div v-else-if="error" class="error-message">{{ error }}</div>
-
-    <!-- 主内容 -->
-    <template v-else>
-      <!-- 进度条容器 -->
-      <div class="progress-container">
-        <!-- 背景进度条 -->
-        <div class="progress-track">
-          <!-- 当前进度 -->
-          <div
-              class="current-progress"
-              :style="{ width: `${(participantCount / 20) * 100}%` }"
-          ></div>
-
-          <!-- 里程碑节点 -->
-          <div
-              v-for="(milestone, index) in milestones"
-              :key="index"
-              class="milestone-marker"
-              :class="{ 'achieved': participantCount >= milestone.target }"
-              :style="{ left: milestone.position }"
-          >
-            <div class="marker-tip">{{ milestone.target }}人</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 当前状态 -->
-      <div class="status-info">
-        当前有效参赛人数：<strong>{{ participantCount }}</strong> 人
-      </div>
-
-      <!-- 奖品展示 -->
-      <div class="rewards-container">
-        <div
-            v-for="(milestone, index) in milestones"
-            :key="index"
-            class="reward-tier"
-        >
-          <h3 :class="{ 'achieved': participantCount >= milestone.target }">
-            {{ milestone.target }}人奖励
-          </h3>
-          <ul>
-            <li
-                v-for="(reward, rewardIndex) in milestone.rewards"
-                :key="rewardIndex"
-                :class="{ 'achieved': participantCount >= milestone.target }"
-            >
-              {{ reward }}
-            </li>
-          </ul>
-        </div>
-      </div>
-
-      <!-- 人数不足提示 -->
-      <div v-if="participantCount < 5" class="notice">
-        * 当前参赛人数不足5人，无法解锁任何奖励
-      </div>
-    </template>
-  </section>
-</template>
-
 <style scoped>
-.ranking {
-  flex: 1;
-  background: #1e1e1e;
-  padding: 2rem;
-  border-radius: 20px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
-  min-height: 600px;  /* 保证内容高度统一 */
+/* 1. 外层容器 */
+.reward-map-card {
+  background: rgba(20, 22, 26, 0.6);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 24px;
+  padding: 32px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+  margin-top: 40px; /* 与上方双栏保持间距 */
 }
+
+/* 头部 */
+.card-header {
+  margin-bottom: 40px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.title-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.header-icon { color: #10b981; filter: drop-shadow(0 0 5px rgba(16, 185, 129, 0.5)); }
 
 h2 {
+  margin: 0;
   font-size: 1.8rem;
-  margin-bottom: 2rem;
-  color: #10a37f;
-  text-align: center;
-  letter-spacing: 0.05em;
-  position: relative;
-  padding-bottom: 0.5rem;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 1px;
 }
 
-h2::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 60px;
-  height: 2px;
-  background: rgba(16, 163, 127, 0.3);
-}
+.subtitle { font-size: 1rem; color: #9ca3af; margin-left: 40px; }
 
-/* ===== 进度条样式优化 ===== */
-.progress-container {
-  margin: 2.5rem 0;
+/* 2. 进度条区域 */
+.progress-section {
   position: relative;
+  padding: 40px 20px 60px; /* 为节点留出空间 */
 }
 
 .progress-track {
-  height: 16px;
-  background: #2a2a2a;
-  border-radius: 8px;
-  position: relative;
-  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
-}
-
-.current-progress {
-  height: 100%;
-  background: linear-gradient(90deg, #10a37f, #0d8f6f);
-  border-radius: 8px;
-  transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
-  position: relative;
-  overflow: hidden;
-}
-
-.current-progress::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: linear-gradient(90deg,
-  rgba(255,255,255,0) 0%,
-  rgba(255,255,255,0.15) 50%,
-  rgba(255,255,255,0) 100%
-  );
-  pointer-events: none;
-}
-
-/* ===== 里程碑标记 ===== */
-.milestone-marker {
-  position: absolute;
-  top: -6px;
-  width: 24px;
-  height: 24px;
-  background: #3a3a3a;
-  border-radius: 50%;
-  transform: translateX(-50%);
-  transition: all 0.3s ease;
-  cursor: pointer;
-  border: 2px solid #2a2a2a;
-}
-
-.milestone-marker.achieved {
-  background: #10a37f;
-  box-shadow: 0 0 12px rgba(16, 163, 127, 0.4);
-  border-color: #0d8f6f;
-}
-
-.marker-tip {
-  position: absolute;
-  bottom: calc(100% + 10px);
-  left: 50%;
-  transform: translateX(-50%);
-  background: #252526;
-  padding: 8px 16px;
+  height: 12px;
+  background: rgba(255, 255, 255, 0.1);
   border-radius: 6px;
-  color: #e0e0e0;
-  font-size: 0.95rem;
-  white-space: nowrap;
-  opacity: 0;
-  transition: all 0.3s ease;
-  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.2);
+  position: relative;
 }
 
-.milestone-marker:hover .marker-tip {
-  opacity: 1;
-  transform: translateX(-50%) translateY(-2px);
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #10b981, #3b82f6);
+  border-radius: 6px;
+  position: relative;
+  transition: width 1s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* ===== 状态信息 ===== */
-.status-info {
-  text-align: center;
-  color: #909090;
-  margin: 1.5rem 0;
-  font-size: 1.1rem;
+.progress-glow {
+  position: absolute;
+  top: 0; right: 0; bottom: 0; width: 20px;
+  background: #fff;
+  filter: blur(5px);
+  opacity: 0.6;
+  box-shadow: 0 0 10px #fff;
 }
 
-.status-info strong {
-  color: #10a37f;
-  font-weight: 600;
-}
-
-/* ===== 奖励展示 ===== */
-.rewards-container {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 2rem;
-  margin-top: 3rem;
-}
-
-.reward-tier {
-  background: #252526;
-  padding: 1.5rem;
-  border-radius: 12px;
-  border: 1px solid #303030;
-  transition: all 0.3s ease;
-  min-height: 200px;  /* 统一卡片高度 */
+/* 节点 */
+.milestone-node {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
   display: flex;
   flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  z-index: 2;
 }
 
-.reward-tier:hover {
+.node-icon-wrapper {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #1f2937;
+  border: 2px solid #4b5563;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #9ca3af;
+  transition: all 0.5s;
+}
+
+.milestone-node.unlocked .node-icon-wrapper {
+  background: #10b981;
+  border-color: #fff;
+  color: #fff;
+  box-shadow: 0 0 15px rgba(16, 185, 129, 0.6);
+  transform: scale(1.2);
+}
+
+.node-label {
+  font-size: 12px;
+  color: #9ca3af;
+  margin-top: 18px; /* 放到进度条下面 */
+  white-space: nowrap;
+}
+
+/* 3. 状态条 */
+.status-banner {
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 30px;
+  margin-bottom: 40px;
+}
+
+.status-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 1rem;
+  color: #d1d5db;
+}
+
+.status-icon { color: #10b981; }
+.highlight-num { font-size: 1.4rem; font-weight: 700; color: #fff; font-family: monospace; }
+.status-divider { width: 1px; height: 24px; background: rgba(255,255,255,0.1); }
+
+/* 4. 奖励卡片网格 */
+.rewards-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px;
+}
+
+.reward-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 20px;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s;
+}
+
+.reward-card:hover {
   transform: translateY(-4px);
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3);
+  background: rgba(255, 255, 255, 0.05);
 }
 
-.reward-tier h3 {
-  color: #e06c75;
-  font-size: 1.2rem;
-  margin-bottom: 1.2rem;
-  text-align: center;
-  font-weight: 600;
-  padding-bottom: 0.8rem;
-  border-bottom: 1px solid #333;
-  transition: all 0.3s ease;
+/* 解锁状态 */
+.reward-card.is-unlocked {
+  border-color: rgba(16, 185, 129, 0.3);
+  background: linear-gradient(180deg, rgba(16, 185, 129, 0.05), transparent);
 }
 
-.reward-tier h3.achieved {
-  color: #10a37f;
-  border-bottom-color: rgba(16, 163, 127, 0.3);
+.card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
 }
 
-.reward-tier ul {
+.target-badge {
+  font-size: 0.9rem; font-weight: 700; color: #fff;
+}
+
+.status-text {
+  font-size: 0.75rem;
+  display: flex; align-items: center; gap: 4px;
+  color: #9ca3af;
+}
+
+.is-unlocked .status-text { color: #10b981; }
+
+/* 奖励列表 */
+.reward-list {
   list-style: none;
   padding: 0;
-  margin: auto 0;  /* 垂直居中内容 */
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
-.reward-tier li {
-  color: #e06c75;
-  padding: 0.8rem;
-  margin: 0.5rem 0;
-  border-radius: 6px;
-  transition: all 0.3s ease;
-  background: rgba(224, 108, 117, 0.05);
-  border: 1px solid rgba(224, 108, 117, 0.1);
-  font-size: 0.95rem;
+.reward-list li {
+  font-size: 0.85rem;
+  color: #d1d5db;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
-.reward-tier li.achieved {
-  color: #10a37f;
-  background: rgba(16, 163, 127, 0.08);
-  border-color: rgba(16, 163, 127, 0.15);
+.list-icon { color: #fbbf24; }
+
+/* 未解锁遮罩 */
+.locked-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 1;
+  transition: opacity 0.5s;
 }
 
-/* ===== 响应式设计 ===== */
-@media (max-width: 1200px) {
-  .rewards-container {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 1.5rem;
-  }
+.overlay-lock { color: #6b7280; opacity: 0.8; }
+
+.is-unlocked .locked-overlay { opacity: 0; pointer-events: none; }
+
+/* 加载状态 */
+.state-box {
+  padding: 60px 0;
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  color: #6b7280;
 }
+.spin { animation: spin 1s linear infinite; }
+.error { color: #ef4444; }
 
-@media (max-width: 768px) {
-  .ranking {
-    padding: 1.5rem;
-  }
+@keyframes spin { to { transform: rotate(360deg); } }
 
-  .rewards-container {
-    grid-template-columns: 1fr;
-  }
-
-  .progress-track {
-    height: 12px;
-  }
-
-  .milestone-marker {
-    width: 20px;
-    height: 20px;
-  }
+/* 响应式 */
+@media (max-width: 900px) {
+  .rewards-grid { grid-template-columns: 1fr 1fr; }
 }
-
-/* ===== 提示信息 ===== */
-.notice {
-  text-align: center;
-  color: #e06c75;
-  margin-top: 2rem;
-  padding: 1.2rem;
-  background: #252526;
-  border-radius: 8px;
-  border: 1px solid rgba(224, 108, 117, 0.2);
-  font-size: 0.95rem;
-}
-
-.loading-message,
-.error-message {
-  text-align: center;
-  padding: 2rem;
-  font-size: 1.1rem;
-  border-radius: 8px;
-  margin: 2rem 0;
-}
-
-.loading-message {
-  color: #909090;
-  background: rgba(144, 144, 144, 0.05);
-}
-
-.error-message {
-  color: #e06c75;
-  background: rgba(224, 108, 117, 0.05);
-  border: 1px solid rgba(224, 108, 117, 0.1);
+@media (max-width: 600px) {
+  .rewards-grid { grid-template-columns: 1fr; }
+  .status-banner { flex-direction: column; gap: 10px; }
+  .status-divider { display: none; }
 }
 </style>

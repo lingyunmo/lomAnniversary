@@ -12,30 +12,35 @@ on:
 
 jobs:
   build-check:
-    name: Verify Build (Node 22) # 直接写死名字
+    name: Verify Build (Node 22)
     runs-on: ubuntu-latest
-
-    # 删掉了 strategy 和 matrix 模块，脚本更短了
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      # ✨ 新增步骤：安装 pnpm 环境
+      # 对应你本地的 pnpm v10
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
       - name: Set up Node.js 22
         uses: actions/setup-node@v4
         with:
-          node-version: '22' # 直接指定版本
-          cache: 'npm'
+          node-version: '22'
+          # ✨ 修改缓存配置：改为 'pnpm'
+          cache: 'pnpm'
 
       - name: Install Dependencies
-        # 'npm ci' is faster and stricter than 'npm install' for CI environments
-        run: npm ci
+        # ✨ 修改安装命令：使用 pnpm
+        # --frozen-lockfile 相当于 npm ci，确保完全按照 lock 文件安装
+        run: pnpm install --frozen-lockfile
 
       - name: Check Type & Lint (Optional)
-        # If you have linting scripts, uncomment the line below:
-        # run: npm run lint
         run: echo "Skipping lint check for now..."
 
       - name: Run Production Build
-        # This is the core step. If this fails, the PR will be blocked.
-        run: npm run build
+        # ✨ 修改构建命令
+        run: pnpm run build
