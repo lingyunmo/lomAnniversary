@@ -1,0 +1,41 @@
+name: CI - Frontend Build Check
+
+on:
+  push:
+    branches: [ "master"]
+    paths-ignore:
+      - 'README.md'
+      - '.github/**'
+  pull_request:
+    branches: [ "master"]
+  workflow_dispatch:
+
+jobs:
+  build-check:
+    name: Verify Build (Node 22) # 直接写死名字
+    runs-on: ubuntu-latest
+
+    # 删掉了 strategy 和 matrix 模块，脚本更短了
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22' # 直接指定版本
+          cache: 'npm'
+
+      - name: Install Dependencies
+        # 'npm ci' is faster and stricter than 'npm install' for CI environments
+        run: npm ci
+
+      - name: Check Type & Lint (Optional)
+        # If you have linting scripts, uncomment the line below:
+        # run: npm run lint
+        run: echo "Skipping lint check for now..."
+
+      - name: Run Production Build
+        # This is the core step. If this fails, the PR will be blocked.
+        run: npm run build
