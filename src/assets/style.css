@@ -1,0 +1,55 @@
+/* 引入本地字体 */
+@font-face {
+  font-family: 'NativeFont';
+  src: url('./native.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+}
+
+/* 全局样式重置 */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* 统一背景色与字体 */
+body {
+  min-height: 100vh;
+  background-color: #202123; /* ChatGPT 深色背景 */
+  color: #d1d5db; /* 浅灰色文本 */
+  font-family: 'NativeFont', 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+/* App 根布局 */
+#app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+/* 内容区域 */
+.content-wrapper {
+  flex: 1;
+  padding: 20px;
+  background-color: #343541; /* ChatGPT 风格背景 */
+  border-radius: 8px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+/* 统一链接样式 */
+a {
+  color: #10a37f; /* ChatGPT 绿色 */
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+/* 响应式优化 */
+@media (max-width: 768px) {
+  .content-wrapper {
+    padding: 15px;
+  }
+}
